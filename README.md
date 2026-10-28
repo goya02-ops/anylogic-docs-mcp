@@ -97,6 +97,9 @@ verificación automática.
 | `./install.sh --skip-crawl` | reutiliza lo ya descargado en `raw/html` | reinstalar sin volver a bajar |
 | `./install.sh --no-images` | descarga la guía sin imágenes | ahorra ~4 minutos y 76 MB |
 | `./install.sh --skip-api` | solo guía | no tienes AnyLogic instalado |
+| `./install.sh --register` | registra el MCP en los clientes que detecte | tras instalar |
+| `./install.sh --print-config <cliente>` | imprime la config con rutas reales | para copiar a mano o a otra máquina |
+| `./install.sh --wsl` | variante para agente en Windows y repo en WSL | Windows |
 
 ### Qué hace exactamente
 
@@ -106,7 +109,7 @@ verificación automática.
 4. `scripts/crawl.mjs --images` → **descarga** la guía de `anylogic.help` en `raw/html/`.
 5. `scripts/convert_guide.py` → HTML a Markdown en `corpus/guide/`.
 6. `scripts/build_index.py` → construye `index.db` (~37.000 fragmentos).
-7. `scripts/selftest.py` → 18 comprobaciones de búsqueda y de API.
+7. `scripts/selftest.py` → comprobaciones de búsqueda, API y configuración de clientes.
 
 Si no encuentra AnyLogic, **aborta** y te dice cómo indicar la ruta, porque sin la API
 el MCP pierde la mitad de su valor. Si sólo quieres la guía, usa `--skip-api`.
@@ -132,9 +135,32 @@ local, sin internet.
 
 ---
 
-## Registro en el agente
+## Registro en el cliente MCP
 
-Sustituye `/ruta/a/anylogic-docs-mcp` por la ruta real (la misma donde hiciste `git clone`).
+El servidor habla **stdio**: todos los clientes hacen lo mismo, lanzar
+`<repo>/.venv/bin/python <repo>/server/main.py`. Solo cambia el formato del fichero.
+
+No hace falta escribir rutas a mano: el instalador las conoce.
+
+```bash
+./install.sh --print-config all      # la config de todos los clientes, con rutas reales
+./install.sh --print-config cursor   # solo uno
+./install.sh --register              # registra en los clientes que detecte
+```
+
+`--register` usa la CLI oficial cuando existe (`opencode`, `claude`, `codex`) y, en los
+demás, **fusiona** la entrada en su JSON **haciendo copia de seguridad** (`.bak`) sin
+tocar el resto de servidores.
+
+| Cliente | Dónde vive | Cómo |
+|---|---|---|
+| **opencode** | `~/.config/opencode/opencode.json` | `opencode mcp add` |
+| **Claude Code** | `~/.claude.json` | `claude mcp add -s user` |
+| **Codex CLI** | `~/.codex/config.toml` | `codex mcp add` o TOML |
+| **Cursor** | `~/.cursor/mcp.json` | JSON (`mcpServers`) |
+| **VS Code** (Copilot) | `~/.config/Code/User/mcp.json` | JSON (`servers`, `type: stdio`) |
+| **Antigravity** | `~/.gemini/config/mcp_config.json` | JSON (`mcpServers`) |
+| otros | el que sea | JSON `mcpServers` |
 
 ### opencode
 
@@ -144,17 +170,38 @@ opencode mcp add anylogic-docs --global -- \
   /ruta/a/anylogic-docs-mcp/server/main.py
 ```
 
-Comprobar: `opencode mcp list` debe decir `connected`.
+Comprobar: `opencode mcp list` → `✓ anylogic-docs  connected`.
 
 ### Claude Code
 
 ```bash
-claude mcp add anylogic-docs -- \
+claude mcp add anylogic-docs -s user -- \
   /ruta/a/anylogic-docs-mcp/.venv/bin/python \
   /ruta/a/anylogic-docs-mcp/server/main.py
 ```
 
-### Cursor / VS Code / otros clientes con JSON
+`-s user` lo deja disponible en todos los proyectos (`-s project` lo guarda en
+`.mcp.json` del repo). Comprobar: `claude mcp list`.
+
+### Codex CLI
+
+```bash
+codex mcp add anylogic-docs -- \
+  /ruta/a/anylogic-docs-mcp/.venv/bin/python \
+  /ruta/a/anylogic-docs-mcp/server/main.py
+```
+
+O a mano en `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.anylogic-docs]
+command = "/ruta/a/anylogic-docs-mcp/.venv/bin/python"
+args = ["/ruta/a/anylogic-docs-mcp/server/main.py"]
+```
+
+### Cursor
+
+`~/.cursor/mcp.json` (o `.cursor/mcp.json` dentro de un proyecto):
 
 ```json
 {
@@ -167,32 +214,105 @@ claude mcp add anylogic-docs -- \
 }
 ```
 
-En opencode el JSON equivalente es:
+Luego, en Cursor: **Settings → MCP** y activa `anylogic-docs` (a veces hay que pulsar
+el refresco).
+
+### VS Code (Copilot Chat)
+
+`~/.config/Code/User/mcp.json` (Linux), `~/Library/Application Support/Code/User/mcp.json`
+(macOS) o `.vscode/mcp.json` en el proyecto:
 
 ```json
 {
-  "mcp": {
-    "servers": {
-      "anylogic-docs": {
-        "type": "local",
-        "command": [
-          "/ruta/a/anylogic-docs-mcp/.venv/bin/python",
-          "/ruta/a/anylogic-docs-mcp/server/main.py"
-        ]
-      }
+  "servers": {
+    "anylogic-docs": {
+      "type": "stdio",
+      "command": "/ruta/a/anylogic-docs-mcp/.venv/bin/python",
+      "args": ["/ruta/a/anylogic-docs-mcp/server/main.py"]
     }
   }
 }
 ```
 
-**Reinicia la sesión del agente** después de registrarlo. Si el servidor arranca pero no
-hay índice, la herramienta responde con un error explicando que ejecutes `./install.sh`.
+Ojo: VS Code usa `servers` y exige `"type": "stdio"`. Después: `Ctrl+Shift+P` →
+**MCP: List Servers** → arrancar.
+
+### Google Antigravity
+
+`~/.gemini/config/mcp_config.json` (global, compartido por el IDE y la CLI) o
+`<proyecto>/.agents/mcp_config.json` (solo ese workspace):
+
+```json
+{
+  "mcpServers": {
+    "anylogic-docs": {
+      "command": "/ruta/a/anylogic-docs-mcp/.venv/bin/python",
+      "args": ["/ruta/a/anylogic-docs-mcp/server/main.py"]
+    }
+  }
+}
+```
+
+No añadas `"type"` en este fichero: Antigravity rechaza el campo.
+
+### Cualquier otro cliente
+
+Pide el JSON genérico y pégalo donde tu cliente guarde los servidores:
+
+```bash
+./install.sh --print-config generic
+```
+
+### Windows: agente en Windows y repo en WSL
+
+Si el agente corre **nativo en Windows** pero el repo está dentro de WSL, el comando no
+es el `python` de Linux sino `wsl.exe`:
+
+```bash
+./install.sh --wsl --print-config cursor     # o claude, codex, vscode...
+./install.sh --wsl --distro Ubuntu --register
+```
+
+Genera esto:
+
+```json
+{
+  "mcpServers": {
+    "anylogic-docs": {
+      "command": "wsl.exe",
+      "args": [
+        "-d", "Ubuntu", "--",
+        "/home/tu-usuario/anylogic-docs-mcp/.venv/bin/python",
+        "/home/tu-usuario/anylogic-docs-mcp/server/main.py"
+      ]
+    }
+  }
+}
+```
+
+Funciona, pero stdio a través de `wsl.exe` es más frágil (arranques lentos, cierres
+raros). **Recomendado: instalar el agente también dentro de WSL** y registrarlo ahí sin
+`--wsl`.
+
+Si AnyLogic está instalado en Windows, el javadoc se lee desde WSL por `/mnt/c`:
+
+```bash
+.venv/bin/python scripts/convert_api.py --anylogic "/mnt/c/Program Files/AnyLogic 8.9.9"
+```
+
+### Comprobar que funciona
+
+1. Reinicia el cliente (no basta con recargar la ventana en algunos).
+2. Pídele: *"usa anylogic_version y dime qué tienes indexado"*.
+3. Debe responder con la versión, el número de páginas y de clases. Si dice que no
+   existe la herramienta, el servidor no arrancó: revisa la ruta del `.venv/bin/python`
+   y que `index.db` exista (`./install.sh`).
 
 ### Opcional: que el agente sepa cuándo consultar
 
-El MCP da las herramientas, pero no obliga a usarlas. Para que el agente consulte
-siempre antes de afirmar algo de AnyLogic, añade esto a tu `AGENTS.md` (opencode,
-Codex) o `CLAUDE.md`:
+El MCP da las herramientas, pero no obliga a usarlas. Copia
+[`examples/AGENTS.md`](examples/AGENTS.md) a tu `AGENTS.md` (opencode, Codex),
+`CLAUDE.md` (Claude Code) o `GEMINI.md` (Antigravity), o añade el bloque a mano:
 
 ```markdown
 ## AnyLogic
@@ -308,6 +428,8 @@ Si sólo cambió AnyLogic y quieres refrescar la API (offline, rápido):
 | `Chromium no abrió el puerto de depuración` | perfil bloqueado o puerto ocupado | `rm -rf .chrome-profile` y/o `ANYLOGIC_CDP_PORT=9336 ./install.sh` |
 | `No encontré una instalación de AnyLogic` | ruta no estándar | `.venv/bin/python scripts/convert_api.py --anylogic /ruta/AnyLogic-8.9.9` o `export ANYLOGIC_HOME=...` |
 | `No existe el índice en ...` | falta generar el corpus | `./install.sh` |
+| El cliente no ve la herramienta | servidor mal registrado o sin reiniciar | `./install.sh --print-config <cliente>` y revisa la ruta absoluta del python |
+| `spawn wsl.exe ENOENT` | agente en Windows sin WSL en el PATH | instala el agente dentro de WSL, o usa `--wsl --distro <tu-distro>` |
 | `disk I/O error` al reconstruir | otra sesión tiene el índice abierto | cierra el agente y reintenta; el índice se reemplaza de forma atómica |
 | Búsquedas en español devuelven poco | la documentación está en inglés | busca en inglés (`arrival rate`, no `tasa de llegada`) |
 | Faltan imágenes | enlaces roscos en la propia web de AnyLogic | se registran en `logs/image_failures.json`; no afecta al texto |
@@ -325,8 +447,10 @@ anylogic-docs-mcp/
 │   ├── convert_api.py      # javadoc de AnyLogic → Markdown + símbolos
 │   ├── convert_guide.py    # HTML → Markdown
 │   ├── build_index.py      # corpus → index.db (FTS5)
-│   └── selftest.py         # comprobaciones de búsqueda y API
+│   ├── mcp_config.py       # config MCP de cada cliente (imprimir / registrar)
+│   └── selftest.py         # comprobaciones de búsqueda, API y config
 ├── install.sh              # instalación completa (idempotente)
+├── examples/AGENTS.md      # bloque para que el agente consulte antes de afirmar
 ├── NOTICE.md               # aviso: la licencia MIT no cubre la documentación
 ├── update.sh               # alias de install.sh para actualizar
 ├── requirements.txt

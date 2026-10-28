@@ -5,11 +5,15 @@
 # Solo Unix (Linux y macOS). En Windows hace falta WSL con entorno gráfico.
 #
 # Uso:
-#   ./install.sh                # completo: API + descarga de la guía + índice
-#   ./install.sh --api-only     # solo API (offline, sin descargar la guía)
-#   ./install.sh --skip-crawl   # reutiliza lo ya descargado en raw/html
-#   ./install.sh --no-images    # descarga la guía sin imágenes (más rápido)
-#   ./install.sh --skip-api     # solo guía (si no tienes AnyLogic instalado)
+#   ./install.sh                     # completo: API + descarga de la guía + índice
+#   ./install.sh --api-only          # solo API (offline, sin descargar la guía)
+#   ./install.sh --skip-crawl        # reutiliza lo ya descargado en raw/html
+#   ./install.sh --no-images         # descarga la guía sin imágenes (más rápido)
+#   ./install.sh --skip-api          # solo guía (si no tienes AnyLogic instalado)
+#   ./install.sh --register          # al terminar, registra el MCP en los clientes
+#   ./install.sh --print-config opencode|cursor|vscode|antigravity|claude|codex|generic
+#   ./install.sh --print-config all  # configuración de todos los clientes
+#   ./install.sh --wsl               # agente en Windows y repo dentro de WSL
 #
 set -euo pipefail
 cd "$(dirname "$0")"
@@ -21,11 +25,17 @@ Instala anylogic-docs-mcp: entorno Python, corpus de documentación e índice.
 Solo Unix (Linux y macOS). En Windows hace falta WSL con entorno gráfico.
 
 Uso:
-  ./install.sh                # completo: API + descarga de la guía + índice
-  ./install.sh --api-only     # solo API (offline, sin descargar la guía)
-  ./install.sh --skip-crawl   # reutiliza lo ya descargado en raw/html
-  ./install.sh --no-images    # descarga la guía sin imágenes (más rápido)
-  ./install.sh --skip-api     # solo guía (si no tienes AnyLogic instalado)
+  ./install.sh                     # completo: API + descarga de la guía + índice
+  ./install.sh --api-only          # solo API (offline, sin descargar la guía)
+  ./install.sh --skip-crawl        # reutiliza lo ya descargado en raw/html
+  ./install.sh --no-images         # descarga la guía sin imágenes (más rápido)
+  ./install.sh --skip-api          # solo guía (si no tienes AnyLogic instalado)
+
+  ./install.sh --register          # registra el MCP en los clientes detectados
+  ./install.sh --print-config all  # solo imprime la config (no instala nada)
+  ./install.sh --wsl               # agente en Windows, repo dentro de WSL
+
+Clientes: opencode, claude, codex, cursor, vscode, antigravity, generic.
 
 Requisitos: Python 3.12+, Node 20+ y Chrome/Chromium (para el crawler),
 AnyLogic instalado (para la API) y ~1 GB de disco libre.
@@ -38,19 +48,31 @@ NODE_MIN=20
 DO_API=1
 DO_CRAWL=1
 DO_IMAGES=1
+DO_REGISTER=0
+PRINT_CONFIG=""
+WSL_FLAG=""
 
-for arg in "$@"; do
-  case "$arg" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     --api-only)   DO_CRAWL=0 ;;
     --skip-crawl) DO_CRAWL=0 ;;
     --no-images)  DO_IMAGES=0 ;;
     --skip-api)   DO_API=0 ;;
+    --register)   DO_REGISTER=1 ;;
+    --wsl)        WSL_FLAG="--wsl" ;;
+    --print-config)
+      [ $# -ge 2 ] || { echo "Falta el cliente: --print-config opencode|cursor|..." >&2; exit 2; }
+      PRINT_CONFIG="$2"
+      shift ;;
+    --print-config=*) PRINT_CONFIG="${1#*=}" ;;
     -h|--help) usage; exit 0 ;;
     *)
-      echo "Opción desconocida: $arg (usa --help)" >&2
+      echo "Opción desconocida: $1 (usa --help)" >&2
       exit 2 ;;
   esac
+  shift
 done
+
 
 info()  { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 fail()  { printf '\n\033[1;31mERROR:\033[0m %s\n' "$*" >&2; exit 1; }
@@ -66,6 +88,21 @@ esac
 command -v python3 >/dev/null 2>&1 || fail "No encontré python3. Instálalo (3.12 o superior)."
 if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3,12) else 1)'; then
   fail "Python $(python3 -V | cut -d' ' -f2) es demasiado antiguo. Hace falta 3.12 o superior."
+fi
+
+# --print-config no instala nada: sirve para copiar el JSON en otra máquina.
+if [ -n "$PRINT_CONFIG" ]; then
+  case "$PRINT_CONFIG" in
+    all|opencode|claude|codex|cursor|vscode|antigravity|generic) ;;
+    *) fail "Cliente desconocido: $PRINT_CONFIG
+  Válidos: all, opencode, claude, codex, cursor, vscode, antigravity, generic" ;;
+  esac
+  if [ "$PRINT_CONFIG" = all ]; then
+    python3 scripts/mcp_config.py $WSL_FLAG opencode claude codex cursor vscode antigravity generic
+  else
+    python3 scripts/mcp_config.py $WSL_FLAG "$PRINT_CONFIG"
+  fi
+  exit 0
 fi
 
 if [ "$DO_CRAWL" = 1 ]; then
@@ -169,16 +206,20 @@ $PY scripts/build_index.py
 info "Verificación"
 $PY scripts/selftest.py
 
+if [ "$DO_REGISTER" = 1 ]; then
+  info "Registro en el cliente MCP"
+  $PY scripts/mcp_config.py $WSL_FLAG --apply || warn "no se pudo registrar automáticamente"
+fi
+
 cat <<EOF
 
-Listo. Ahora registra el servidor en tu agente:
+Listo. Falta registrar el servidor en tu cliente MCP:
 
-  opencode mcp add anylogic-docs --global -- "$PWD/.venv/bin/python" "$PWD/server/main.py"
+  ./install.sh --print-config all      # ver la config de cada cliente
+  ./install.sh --register              # registrar en los que detecte
+  ./install.sh --print-config cursor   # solo uno (opencode, claude, codex,
+                                       # cursor, vscode, antigravity, generic)
 
-  claude mcp add anylogic-docs -- "$PWD/.venv/bin/python" "$PWD/server/main.py"
-
-  (o el JSON equivalente para Cursor / VS Code; ver README)
-
-Reinicia la sesión del agente y pídele algo de AnyLogic: debería consultar
-la documentación antes de responder.
+Reinicia el cliente y pídele a la IA que use anylogic_version():
+debería responder con la versión y el tamaño del corpus.
 EOF

@@ -9,7 +9,9 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "server"))
+SCRIPTS = Path(__file__).resolve().parent
+sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(SCRIPTS.parent / "server"))
 
 import main as m  # noqa: E402
 
@@ -71,6 +73,26 @@ def check(name: str, out: str, expect: str | None = None) -> bool:
     return not bad
 
 
+def config_cases() -> list[tuple[str, str]]:
+    """Cada cliente debe producir una entrada MCP con comando y argumentos."""
+    import mcp_config
+
+    out = []
+    for client in mcp_config.CLIENTS:
+        if client == "generic":
+            continue
+        if client == "vscode":
+            node = mcp_config.json_payload(client, False, "Ubuntu")["servers"][mcp_config.NAME]
+        elif client in ("cursor", "antigravity"):
+            node = mcp_config.json_payload(client, False, "Ubuntu")["mcpServers"][mcp_config.NAME]
+        else:
+            cmd, args = mcp_config.command(False, "Ubuntu")
+            node = {"command": cmd, "args": args}
+        ok = bool(node.get("command")) and bool(node.get("args"))
+        out.append((f"config: {client}", "ok" if ok else ""))
+    return out
+
+
 def scopes_in_db() -> set[str]:
     """Qué partes del corpus están indexadas (para no fallar por lo que falta)."""
     import sqlite3
@@ -93,6 +115,8 @@ def main() -> int:
         failures += not check(f"search: {query}", m.anylogic_search(query, limit=3), expect)
     for symbol, expect in (API_CASES if has_api else []):
         failures += not check(f"api: {symbol}", m.anylogic_api(symbol, max_chars=4000), expect)
+    for name, out in config_cases():
+        failures += not check(name, out)
     tool_cases = [c for c in TOOL_CASES if has_guide or c[0] != "anylogic_read sección"]
     tool_cases = [c for c in tool_cases if has_guide or c[0] != "anylogic_examples"]
     for name, fn in tool_cases:
@@ -105,6 +129,7 @@ def main() -> int:
     total = (
         (len(SEARCH_CASES) if has_guide else 0)
         + (len(API_CASES) if has_api else 0)
+        + len(config_cases())
         + len(tool_cases)
     )
     print(f"\n{total - failures}/{total} correctos")
