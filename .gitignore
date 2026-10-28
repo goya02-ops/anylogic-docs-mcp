@@ -1,0 +1,21 @@
+# --- Corpus generado: NO se sube (documentación con copyright de The AnyLogic Company) ---
+corpus/
+raw/
+index.db
+index.db-wal
+index.db-shm
+index.db.tmp
+*.db.tmp
+
+# --- Entorno y estado local ---
+.venv/
+.chrome-profile/
+logs/
+__pycache__/
+*.py[cod]
+.DS_Store
+
+# --- Editores ---
+.idea/
+.vscode/
+*.swp
