@@ -80,7 +80,7 @@ Chromium). Si no está en el `PATH`, se indica con `ANYLOGIC_CHROME`.
 ## Instalación
 
 ```bash
-git clone https://github.com/<usuario>/anylogic-docs-mcp.git
+git clone https://github.com/goya02-ops/anylogic-docs-mcp.git
 cd anylogic-docs-mcp
 ./install.sh
 ```
