@@ -327,6 +327,7 @@ anylogic-docs-mcp/
 │   ├── build_index.py      # corpus → index.db (FTS5)
 │   └── selftest.py         # comprobaciones de búsqueda y API
 ├── install.sh              # instalación completa (idempotente)
+├── NOTICE.md               # aviso: la licencia MIT no cubre la documentación
 ├── update.sh               # alias de install.sh para actualizar
 ├── requirements.txt
 └── pyproject.toml
@@ -352,5 +353,6 @@ logs/            # fallos de crawl e imágenes
   **The AnyLogic Company** y están sujetos a sus términos de uso. Este repositorio
   **no los distribuye**: los scripts los generan en tu máquina a partir de tu propia
   instalación de AnyLogic y del sitio público `anylogic.help`, para **uso personal**.
+  Detalle en [NOTICE.md](NOTICE.md).
 - No redistribuyas `corpus/`, `raw/` ni `index.db`.
 - El crawler respeta `robots.txt` y va deliberadamente despacio.

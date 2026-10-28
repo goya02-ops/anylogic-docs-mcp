@@ -19,13 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
---------------------------------------------------------------------------
-
-Esta licencia cubre únicamente el código de este repositorio.
-
-NO cubre la documentación de AnyLogic (guía de usuario, javadoc, imágenes ni
-los ficheros generados a partir de ellos: corpus/, raw/ e index.db), que es
-propiedad de The AnyLogic Company y está sujeta a sus propios términos de uso.
-Este repositorio no distribuye esa documentación: cada usuario genera su
-propia copia local ejecutando los scripts de instalación.
